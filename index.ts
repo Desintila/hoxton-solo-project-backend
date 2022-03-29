@@ -4,6 +4,7 @@ import cors from "cors"
 import "dotenv/config"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
+import { transformDocument } from "@prisma/client/runtime"
 
 
 const app = express()
@@ -23,7 +24,7 @@ async function getUserFromToken(token: string) {
     const decodedData = jwt.verify(token, process.env.MY_SECRET)
     const user = await prisma.user.findUnique({
         //@ts-ignore
-        where: { id: decodedData.id }, include: { videos: true }
+        where: { id: decodedData.id }, include: { videos: true, subscribedBy: true, subscribing: true }
     })
     return user
 }
@@ -52,7 +53,7 @@ app.post('/login', async (req, res) => {
 
     try {
         const user = await prisma.user.findUnique({
-            where: { email: email }, include: { videos: true }
+            where: { email: email }, include: { videos: true, subscribedBy: true, subscribing: true }
         })
         //@ts-ignore
         const passwordMatch = bcrypt.compareSync(password, user.password)
@@ -104,7 +105,7 @@ app.post('/video', async (req, res) => {
 
 
 app.get('/users', async (req, res) => {
-    const users = await prisma.user.findMany({ include: { videos: true } })
+    const users = await prisma.user.findMany({ include: { videos: true, subscribedBy: true, subscribing: true } })
     res.send(users)
 })
 
@@ -115,7 +116,7 @@ app.get('/users/:id', async (req, res) => {
         const user = await prisma.user.findFirst({
             where: { id },
             include: {
-                videos: true
+                videos: true, subscribedBy: true, subscribing: true
             }
         })
         if (user) {
@@ -158,6 +159,34 @@ app.get('/videos/:id', async (req, res) => {
         res.status(400).send({ error: error.message })
     }
 })
+
+app.patch('/subscribe', async (req, res) => {
+
+    const token = req.headers.authorization || ''
+    const { subscribeId } = req.body
+    try {
+        const user = await getUserFromToken(token)
+        const updatedUser = await prisma.user.update({
+            // @ts-ignore
+            where: { id: user.id }
+            , data: {
+                subscribing: {
+                    connect: {
+                        id: subscribeId
+                    }
+                }
+            },
+            include: { videos: true, subscribedBy: true, subscribing: true }
+        })
+
+        res.send(updatedUser)
+    } catch (err) {
+        // @ts-ignore
+        res.status(400).send({ error: err.message })
+    }
+
+})
+
 
 
 app.listen(4000, () => {
