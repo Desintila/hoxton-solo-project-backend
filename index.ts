@@ -4,7 +4,6 @@ import cors from "cors"
 import "dotenv/config"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
-import { transformDocument } from "@prisma/client/runtime"
 
 
 const app = express()
@@ -133,7 +132,7 @@ app.get('/users/:id', async (req, res) => {
 })
 
 app.get('/videos', async (req, res) => {
-    const videos = await prisma.video.findMany({ include: { user: true } })
+    const videos = await prisma.video.findMany({ include: { user: true, video_likes: true, video_dislikes: true } })
     res.send(videos)
 })
 
@@ -145,7 +144,7 @@ app.get('/videos/:id', async (req, res) => {
         const video = await prisma.video.findFirst({
             where: { id },
             include: {
-                user: true
+                user: true, video_likes: true, video_dislikes: true
             }
         })
         if (video) {
@@ -187,7 +186,50 @@ app.patch('/subscribe', async (req, res) => {
 
 })
 
+app.post('/video_likes', async (req, res) => {
+    const { videoId } = req.body
+    const token = req.headers.authorization || ''
+    try {
+        const user = await getUserFromToken(token)
+        if (!user) {
+            res.status(404).send({ error: 'You need to login before.' })
+        }
+        else {
+            const like = await prisma.video_likes.create({
+                // @ts-ignore
+                data: { videoId: videoId, userId: user.id }
+            })
+            res.send(like)
+        }
+    }
+    catch (err) {
+        // @ts-ignore
+        res.status(400).send({ error: err.message })
+    }
+})
 
+
+app.post('/video_dislikes', async (req, res) => {
+    const { videoId } = req.body
+    const token = req.headers.authorization || ''
+    try {
+        const user = await getUserFromToken(token)
+        if (!user) {
+            res.status(404).send({ error: 'You need to login before.' })
+        }
+        else {
+            const dislike = await prisma.video_dislikes.create({
+                // @ts-ignore
+                data: { videoId: videoId, userId: user.id }
+            })
+            res.send(dislike)
+        }
+    }
+    catch (err) {
+        // @ts-ignore
+        res.status(400).send({ error: err.message })
+    }
+})
 
 app.listen(4000, () => {
     console.log('Server running: http://localhost:4000')
