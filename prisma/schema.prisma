@@ -25,6 +25,7 @@ model User {
   comment_likes    comment_likes[]
   video_dislikes   video_dislikes[]
   comment_dislikes comment_dislikes[]
+  watch_later      watch_later[]
 }
 
 model Video {
@@ -40,6 +41,7 @@ model Video {
   comments       Comment[]
   video_likes    video_likes[]
   video_dislikes video_dislikes[]
+  watch_later    watch_later[]
 }
 
 model Comment {
@@ -49,7 +51,6 @@ model Comment {
   video            Video              @relation(fields: [videoId], references: [id])
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
-  dateCreated      String
   commentText      String
   videoId          Int
   comment_likes    comment_likes[]
@@ -86,4 +87,14 @@ model comment_dislikes {
   userId    Int
   comment   Comment @relation(fields: [commentId], references: [id])
   commentId Int
+}
+
+model watch_later {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  video     Video    @relation(fields: [videoId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    Int
+  videoId   Int
 }
