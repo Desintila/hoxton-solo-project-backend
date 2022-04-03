@@ -23,7 +23,7 @@ async function getUserFromToken(token: string) {
     const decodedData = jwt.verify(token, process.env.MY_SECRET)
     const user = await prisma.user.findUnique({
         //@ts-ignore
-        where: { id: decodedData.id }, include: { videos: true, subscribedBy: true, subscribing: true }
+        where: { id: decodedData.id }, include: { videos: true, subscribedBy: true, subscribing: true, watch_later: { include: { video: true, user: true } }, video_likes: true }
     })
     return user
 }
@@ -52,7 +52,7 @@ app.post('/login', async (req, res) => {
 
     try {
         const user = await prisma.user.findUnique({
-            where: { email: email }, include: { videos: true, subscribedBy: true, subscribing: true }
+            where: { email: email }, include: { videos: true, subscribedBy: true, subscribing: true, video_likes: true, watch_later: { include: { video: true, user: true } } }
         })
         //@ts-ignore
         const passwordMatch = bcrypt.compareSync(password, user.password)
@@ -104,7 +104,7 @@ app.post('/video', async (req, res) => {
 
 
 app.get('/users', async (req, res) => {
-    const users = await prisma.user.findMany({ include: { videos: true, subscribedBy: true, subscribing: true } })
+    const users = await prisma.user.findMany({ include: { videos: true, subscribedBy: true, subscribing: true, video_likes: true, watch_later: { include: { video: true, user: true } } } })
     res.send(users)
 })
 
@@ -115,7 +115,7 @@ app.get('/users/:id', async (req, res) => {
         const user = await prisma.user.findFirst({
             where: { id },
             include: {
-                videos: true, subscribedBy: true, subscribing: true
+                videos: true, subscribedBy: true, subscribing: true, video_likes: true, watch_later: { include: { video: true, user: true } }
             }
         })
         if (user) {
@@ -329,7 +329,8 @@ app.post('/watch_later', async (req, res) => {
         else {
             const watch = await prisma.watch_later.create({
                 // @ts-ignore
-                data: { videoId: videoId, userId: user.id }
+                data: { videoId: videoId, userId: user.id },
+                include: { video: { include: { user: true } } }
             })
             res.send(watch)
         }
@@ -339,6 +340,74 @@ app.post('/watch_later', async (req, res) => {
         res.status(400).send({ error: err.message })
     }
 })
+
+app.get('/watch_later', async (req, res) => {
+    const token = req.headers.authorization || ''
+    try {
+        const user = await getUserFromToken(token)
+        if (user) {
+            const watch = await prisma.watch_later.findMany({
+                // @ts-ignore
+                where: { userId: user.id },
+                include: { video: { include: { user: true } } }
+            })
+            res.send(watch)
+        }
+        else {
+            res.status(404).send({ error: 'You need to login before.' })
+        }
+    }
+    catch (err) {
+        // @ts-ignore
+        res.status(400).send({ error: err.message })
+    }
+})
+
+app.get('/usersToSubscribe', async (req, res) => {
+    const token = req.headers.authorization || ''
+    try {
+        const user = await getUserFromToken(token)
+        if (user) {
+            const usersToSubscribe = await prisma.user.findMany({
+                // @ts-ignore
+                where: { NOT: { id: user.id } }
+            })
+
+            res.send(usersToSubscribe)
+        }
+        else {
+            res.status(404).send({ error: 'You need to login before.' })
+        }
+    }
+    catch (err) {
+        // @ts-ignore
+        res.status(400).send({ error: err.message })
+    }
+})
+
+app.get('/likedVideos', async (req, res) => {
+    const token = req.headers.authorization || ''
+    try {
+        const user = await getUserFromToken(token)
+        if (user) {
+            const likedVideos = await prisma.video_likes.findMany({
+                // @ts-ignore
+                where: { userId: user.id },
+                include: { video: { include: { user: true } } }
+            })
+
+            res.send(likedVideos)
+        }
+        else {
+            res.status(404).send({ error: 'You need to login before.' })
+        }
+    }
+    catch (err) {
+        // @ts-ignore
+        res.status(400).send({ error: err.message })
+    }
+})
+
 
 app.listen(4000, () => {
     console.log('Server running: http://localhost:4000')
