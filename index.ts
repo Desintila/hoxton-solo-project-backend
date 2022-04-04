@@ -409,6 +409,26 @@ app.get('/likedVideos', async (req, res) => {
 })
 
 
+app.post('/search', async (req, res) => {
+    const { searchedText } = req.body
+    try {
+        const video = await prisma.video.findMany({
+            where: {
+                title: {
+                    contains: searchedText
+                }
+            }, include: { user: true }
+
+        })
+        res.send(video)
+    }
+    catch (err) {
+        // @ts-ignore
+        res.status(400).send({ error: err.message })
+    }
+})
+
+
 app.listen(4000, () => {
     console.log('Server running: http://localhost:4000')
 })
