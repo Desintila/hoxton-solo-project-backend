@@ -4,13 +4,23 @@ import cors from "cors"
 import "dotenv/config"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
-
+import multer from "multer"
 
 const app = express()
 app.use(cors())
 app.use(express.json())
 
 const prisma = new PrismaClient()
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'public')
+    },
+    filename: (req, file, cb) => {
+        cb(null, file.originalname)
+    }
+})
+const upload = multer({ storage })
 
 function createToken(id: number) {
     //@ts-ignore
@@ -85,20 +95,21 @@ app.get('/validate', async (req, res) => {
     }
 })
 
-app.post('/video', async (req, res) => {
-    const { title, description, url, thumbnail } = req.body
+app.post('/video', upload.single("url"), async (req, res) => {
     const token = req.headers.authorization || ''
     try {
+        const path = req.file?.path
         const user = await getUserFromToken(token)
+        const { title, description, thumbnail } = req.body
         const video = await prisma.video.create({
             // @ts-ignore
-            data: { title: title, description: description, url: url, thumbnail: thumbnail, userId: user.id }
+            data: { title: title, description: description, url: path, thumbnail: thumbnail, userId: user.id }
         })
-        res.send(video)
+        res.status(200).send(video)
     }
     catch (err) {
         // @ts-ignore
-        res.status(400).send({ error: err.message })
+        res.status(400).send({ error: 'Invalid Token' })
     }
 })
 
