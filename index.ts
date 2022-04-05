@@ -9,7 +9,7 @@ import multer from "multer"
 const app = express()
 app.use(cors())
 app.use(express.json())
-
+app.use('/public', express.static('public'))
 const prisma = new PrismaClient()
 
 const storage = multer.diskStorage({
