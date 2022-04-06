@@ -26,6 +26,8 @@ model User {
   video_dislikes   video_dislikes[]
   comment_dislikes comment_dislikes[]
   watch_later      watch_later[]
+  Video_Views      Video_Views[]
+  notifications    Notification[]
 }
 
 model Video {
@@ -42,6 +44,7 @@ model Video {
   video_likes    video_likes[]
   video_dislikes video_dislikes[]
   watch_later    watch_later[]
+  Video_Views    Video_Views[]
 }
 
 model Comment {
@@ -97,4 +100,21 @@ model watch_later {
   updatedAt DateTime @updatedAt
   userId    Int
   videoId   Int
+}
+
+model Video_Views {
+  id      Int   @id @default(autoincrement())
+  user    User  @relation(fields: [userId], references: [id])
+  userId  Int
+  video   Video @relation(fields: [videoId], references: [id])
+  videoId Int
+}
+
+model Notification {
+  id          Int      @id @default(autoincrement())
+  user        User     @relation(fields: [userId], references: [id])
+  userId      Int
+  dateCreated DateTime @default(now())
+  message     String
+  seen        Boolean  @default(false)
 }

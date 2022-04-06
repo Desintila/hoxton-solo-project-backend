@@ -33,7 +33,7 @@ async function getUserFromToken(token: string) {
     const decodedData = jwt.verify(token, process.env.MY_SECRET)
     const user = await prisma.user.findUnique({
         //@ts-ignore
-        where: { id: decodedData.id }, include: { videos: true, subscribedBy: true, subscribing: true, watch_later: { include: { video: true, user: true } }, video_likes: true }
+        where: { id: decodedData.id }, include: { videos: true, subscribedBy: true, subscribing: true, Video_Views: true, watch_later: { include: { video: true, user: true } }, video_likes: true, notifications: true }
     })
     return user
 }
@@ -62,7 +62,7 @@ app.post('/login', async (req, res) => {
 
     try {
         const user = await prisma.user.findUnique({
-            where: { email: email }, include: { videos: true, subscribedBy: true, subscribing: true, video_likes: true, watch_later: { include: { video: true, user: true } } }
+            where: { email: email }, include: { videos: true, notifications: true, subscribedBy: true, subscribing: true, video_likes: true, Video_Views: true, watch_later: { include: { video: true, user: true } } }
         })
         //@ts-ignore
         const passwordMatch = bcrypt.compareSync(password, user.password)
@@ -143,7 +143,7 @@ app.get('/users/:id', async (req, res) => {
 })
 
 app.get('/videos', async (req, res) => {
-    const videos = await prisma.video.findMany({ include: { user: true, comments: true, video_likes: true, video_dislikes: true } })
+    const videos = await prisma.video.findMany({ include: { user: true, comments: true, Video_Views: true, video_likes: true, video_dislikes: true } })
     res.send(videos)
 })
 
@@ -155,7 +155,7 @@ app.get('/videos/:id', async (req, res) => {
         const video = await prisma.video.findFirst({
             where: { id },
             include: {
-                user: true, video_likes: true, video_dislikes: true, comments: true
+                user: true, video_likes: true, video_dislikes: true, comments: true, Video_Views: true
             }
         })
         if (video) {
@@ -188,6 +188,14 @@ app.patch('/subscribe', async (req, res) => {
             },
             include: { videos: true, subscribedBy: true, subscribing: true }
         })
+        if (user) {
+
+            await prisma.notification.create({
+                data: {
+                    message: `${user.firstName} subscribed on your channel`, userId: subscribeId
+                }
+            })
+        }
 
         res.send(updatedUser)
     } catch (err) {
@@ -210,6 +218,17 @@ app.post('/video_likes', async (req, res) => {
                 // @ts-ignore
                 data: { videoId: videoId, userId: user.id }
             })
+            const video = await prisma.video.findFirst({
+                where: { id: videoId }
+            })
+            if (video && user) {
+
+                await prisma.notification.create({
+                    data: {
+                        message: `${user.firstName} liked your video`, userId: video.userId
+                    }
+                })
+            }
             res.send(like)
         }
     }
@@ -233,6 +252,17 @@ app.post('/video_dislikes', async (req, res) => {
                 // @ts-ignore
                 data: { videoId: videoId, userId: user.id }
             })
+            const video = await prisma.video.findFirst({
+                where: { id: videoId }
+            })
+            if (video && user) {
+
+                await prisma.notification.create({
+                    data: {
+                        message: `${user.firstName} disliked your video`, userId: video.userId
+                    }
+                })
+            }
             res.send(dislike)
         }
     }
@@ -253,6 +283,17 @@ app.post('/comments', async (req, res) => {
             data: { commentText: commentText, userId: user.id, videoId: videoId },
             include: { comment_likes: true, comment_dislikes: true }
         })
+        const video = await prisma.video.findFirst({
+            where: { id: videoId }
+        })
+        if (video && user) {
+
+            await prisma.notification.create({
+                data: {
+                    message: `${user.firstName} commented on your video`, userId: video.userId
+                }
+            })
+        }
         res.send(comment)
     }
     catch (err) {
@@ -439,6 +480,44 @@ app.post('/search', async (req, res) => {
     }
 })
 
+app.post('/video_views', async (req, res) => {
+    const { videoId } = req.body
+    const token = req.headers.authorization || ''
+    try {
+        const user = await getUserFromToken(token)
+
+        const view = await prisma.video_Views.create({
+            // @ts-ignore
+            data: { videoId: videoId, userId: user.id }
+        })
+        res.send(view)
+
+    }
+    catch (err) {
+        // @ts-ignore
+        res.status(400).send({ error: err.message })
+    }
+})
+
+app.get('/viewHistory', async (req, res) => {
+    const token = req.headers.authorization || ''
+    try {
+        const user = await getUserFromToken(token)
+        const view = await prisma.video_Views.findMany({
+            // @ts-ignore
+            where: { userId: user.id },
+            distinct: ["videoId"],
+
+            include: { video: { include: { user: true } } }
+        })
+
+        res.send(view)
+    }
+    catch (err) {
+        // @ts-ignore
+        res.status(400).send({ error: err.message })
+    }
+})
 
 app.listen(4000, () => {
     console.log('Server running: http://localhost:4000')
