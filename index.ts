@@ -33,7 +33,7 @@ async function getUserFromToken(token: string) {
     const decodedData = jwt.verify(token, process.env.MY_SECRET)
     const user = await prisma.user.findUnique({
         //@ts-ignore
-        where: { id: decodedData.id }, include: { videos: true, subscribedBy: true, subscribing: true, Video_Views: true, watch_later: { include: { video: true, user: true } }, video_likes: true, notifications: true }
+        where: { id: decodedData.id }, include: { videos: true, subscribedBy: true, subscribing: { include: { videos: true } }, Video_Views: true, watch_later: { include: { video: true, user: true } }, video_likes: true, notifications: { include: { user: true } } }
     })
     return user
 }
@@ -46,7 +46,8 @@ app.post('/register', async (req, res) => {
         const hash = bcrypt.hashSync(password, 8)
 
         const user = await prisma.user.create({
-            data: { firstName: firstName, lastName: lastName, email: email, password: hash, image: image }
+            data: { firstName: firstName, lastName: lastName, email: email, password: hash, image: image },
+            include: { videos: true, notifications: { include: { user: true } }, subscribedBy: true, subscribing: { include: { videos: true } }, video_likes: true, Video_Views: true, watch_later: { include: { video: true, user: true } } }
         })
         res.send({ user, token: createToken(user.id) })
     }
@@ -62,7 +63,7 @@ app.post('/login', async (req, res) => {
 
     try {
         const user = await prisma.user.findUnique({
-            where: { email: email }, include: { videos: true, notifications: true, subscribedBy: true, subscribing: true, video_likes: true, Video_Views: true, watch_later: { include: { video: true, user: true } } }
+            where: { email: email }, include: { videos: true, notifications: { include: { user: true } }, subscribedBy: true, subscribing: { include: { videos: true } }, video_likes: true, Video_Views: true, watch_later: { include: { video: true, user: true } } }
         })
         //@ts-ignore
         const passwordMatch = bcrypt.compareSync(password, user.password)
@@ -143,7 +144,7 @@ app.get('/users/:id', async (req, res) => {
 })
 
 app.get('/videos', async (req, res) => {
-    const videos = await prisma.video.findMany({ include: { user: true, comments: true, Video_Views: true, video_likes: true, video_dislikes: true } })
+    const videos = await prisma.video.findMany({ include: { user: true, videoTags: { include: { hashTag: true } }, comments: { include: { user: true, comment_dislikes: true, comment_likes: true } }, Video_Views: true, video_likes: true, video_dislikes: true } })
     res.send(videos)
 })
 
@@ -155,7 +156,7 @@ app.get('/videos/:id', async (req, res) => {
         const video = await prisma.video.findFirst({
             where: { id },
             include: {
-                user: true, video_likes: true, video_dislikes: true, comments: true, Video_Views: true
+                user: true, video_likes: true, video_dislikes: true, comments: { include: { user: true, comment_dislikes: true, comment_likes: true } }, Video_Views: true, videoTags: { include: { hashTag: true } }
             }
         })
         if (video) {
@@ -186,7 +187,7 @@ app.patch('/subscribe', async (req, res) => {
                     }
                 }
             },
-            include: { videos: true, subscribedBy: true, subscribing: true }
+            include: { videos: true, subscribedBy: true, subscribing: true, notifications: true }
         })
         if (user) {
 
@@ -281,7 +282,7 @@ app.post('/comments', async (req, res) => {
         const comment = await prisma.comment.create({
             // @ts-ignore
             data: { commentText: commentText, userId: user.id, videoId: videoId },
-            include: { comment_likes: true, comment_dislikes: true }
+            include: { comment_likes: true, comment_dislikes: true, user: true }
         })
         const video = await prisma.video.findFirst({
             where: { id: videoId }
@@ -313,7 +314,8 @@ app.post('/comment_likes', async (req, res) => {
         else {
             const like = await prisma.comment_likes.create({
                 // @ts-ignore
-                data: { commentId: commentId, userId: user.id }
+                data: { commentId: commentId, userId: user.id }, include:
+                    { user: true, comment: true }
             })
             res.send(like)
         }
@@ -335,7 +337,8 @@ app.post('/comment_dislikes', async (req, res) => {
         else {
             const dislike = await prisma.comment_dislikes.create({
                 // @ts-ignore
-                data: { commentId: commentId, userId: user.id }
+                data: { commentId: commentId, userId: user.id }, include:
+                    { user: true, comment: true }
             })
             res.send(dislike)
         }
@@ -518,6 +521,64 @@ app.get('/viewHistory', async (req, res) => {
         res.status(400).send({ error: err.message })
     }
 })
+
+
+
+app.get('/trending', async (req, res) => {
+    try {
+
+        const trending = await prisma.video.findMany({
+            orderBy: {
+                Video_Views: { _count: 'desc' }
+            },
+            include: { user: true, Video_Views: true }
+        })
+
+        res.send(trending)
+    }
+    catch (err) {
+        // @ts-ignore
+        res.status(400).send({ error: err.message })
+    }
+})
+
+app.post('/tags', async (req, res) => {
+    const { name, videoId } = req.body
+    try {
+
+        const tags = await prisma.videoTags.create({
+            data: { video: { connect: { id: videoId } }, hashTag: { create: { name: name } } }
+        })
+        res.send(tags)
+    }
+    catch (error) {
+        //@ts-ignore
+        res.status(400).send({ error: error.message })
+    }
+})
+
+app.delete('/watchlater/:id', async (req, res) => {
+    const token = req.headers.authorization || ''
+    const id = Number(req.params.id)
+    try {
+        const user = await getUserFromToken(token)
+        const watch = await prisma.watch_later.findUnique({ where: { id: id } })
+
+        if (user?.id === watch?.userId) {
+            const watchlater = await prisma.watch_later.delete({ where: { id: id } })
+            res.send(watchlater)
+        }
+        else {
+            res.status(400).send({ error: 'Not authorized to delete' })
+        }
+    }
+    catch (error) {
+        //@ts-ignore
+        res.status(400).send({ error: error.message })
+    }
+})
+
+
 
 app.listen(4000, () => {
     console.log('Server running: http://localhost:4000')

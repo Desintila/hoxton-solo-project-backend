@@ -45,6 +45,7 @@ model Video {
   video_dislikes video_dislikes[]
   watch_later    watch_later[]
   Video_Views    Video_Views[]
+  videoTags      VideoTags[]
 }
 
 model Comment {
@@ -117,4 +118,18 @@ model Notification {
   dateCreated DateTime @default(now())
   message     String
   seen        Boolean  @default(false)
+}
+
+model VideoTags {
+  id        Int     @id @default(autoincrement())
+  video     Video   @relation(fields: [videoId], references: [id])
+  hashTag   HashTag @relation(fields: [hashTagId], references: [id])
+  videoId   Int
+  hashTagId Int
+}
+
+model HashTag {
+  id        Int         @id @default(autoincrement())
+  name      String      @unique
+  videoTags VideoTags[]
 }
