@@ -28,6 +28,7 @@ model User {
   watch_later      watch_later[]
   Video_Views      Video_Views[]
   notifications    Notification[]
+  Post             Post[]
 }
 
 model Video {
@@ -62,11 +63,12 @@ model Comment {
 }
 
 model video_likes {
-  id      Int   @id @default(autoincrement())
-  user    User  @relation(fields: [userId], references: [id])
+  id      Int     @id @default(autoincrement())
+  user    User    @relation(fields: [userId], references: [id])
   userId  Int
-  video   Video @relation(fields: [videoId], references: [id])
+  video   Video   @relation(fields: [videoId], references: [id])
   videoId Int
+  liked   Boolean @default(false)
 }
 
 model video_dislikes {
@@ -132,4 +134,13 @@ model HashTag {
   id        Int         @id @default(autoincrement())
   name      String      @unique
   videoTags VideoTags[]
+}
+
+model Post {
+  id          Int      @id @default(autoincrement())
+  user        User     @relation(fields: [userId], references: [id])
+  userId      Int
+  dateCreated DateTime @default(now())
+  text        String
+
 }
