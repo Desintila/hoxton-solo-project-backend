@@ -578,6 +578,15 @@ app.delete('/watchlater/:id', async (req, res) => {
     }
 })
 
+app.get('/allvideosexpectone/:id', async (req, res) => {
+    const id = Number(req.params.id)
+
+    const videos = await prisma.video.findMany({
+        where: { NOT: { id: id } },
+        include: { user: true, videoTags: { include: { hashTag: true } }, comments: { include: { user: true, comment_dislikes: true, comment_likes: true } }, Video_Views: true, video_likes: true, video_dislikes: true }
+    })
+    res.send(videos)
+})
 
 
 app.listen(4000, () => {
