@@ -49,7 +49,7 @@ app.post('/register', async (req, res) => {
             data: { firstName: firstName, lastName: lastName, email: email, password: hash, image: image },
             include: { videos: { include: { Video_Views: true } }, Post: { include: { user: true } }, notifications: { include: { user: true } }, subscribedBy: true, subscribing: { include: { videos: true } }, video_likes: true, Video_Views: true, watch_later: { include: { video: true, user: true } } }
         })
-        res.send({ user, token: createToken(user.id) })
+        res.status(200).send({ user, token: createToken(user.id) })
     }
     catch (err) {
         // @ts-ignore
@@ -69,7 +69,7 @@ app.post('/login', async (req, res) => {
         const passwordMatch = bcrypt.compareSync(password, user.password)
 
         if (user && passwordMatch) {
-            res.send({ user, token: createToken(user.id) })
+            res.status(200).send({ user, token: createToken(user.id) })
         }
         else {
             throw Error('Something wrong!')
@@ -88,7 +88,7 @@ app.get('/validate', async (req, res) => {
     try {
         const user = await getUserFromToken(token)
 
-        res.send(user)
+        res.status(200).send(user)
     }
     catch (err) {
         // @ts-ignore
@@ -117,7 +117,7 @@ app.post('/video', upload.single("url"), async (req, res) => {
 
 app.get('/users', async (req, res) => {
     const users = await prisma.user.findMany({ include: { videos: { include: { Video_Views: true } }, Post: { include: { user: true } }, subscribedBy: true, subscribing: true, video_likes: true, watch_later: { include: { video: true, user: true } } } })
-    res.send(users)
+    res.status(200).send(users)
 })
 
 app.get('/users/:id', async (req, res) => {
@@ -131,7 +131,7 @@ app.get('/users/:id', async (req, res) => {
             }
         })
         if (user) {
-            res.send(user)
+            res.status(200).send(user)
         }
 
         else {
@@ -145,7 +145,7 @@ app.get('/users/:id', async (req, res) => {
 
 app.get('/videos', async (req, res) => {
     const videos = await prisma.video.findMany({ include: { user: true, videoTags: { include: { hashTag: true } }, comments: { include: { user: true, comment_dislikes: true, comment_likes: true } }, Video_Views: true, video_likes: true, video_dislikes: true } })
-    res.send(videos)
+    res.status(200).send(videos)
 })
 
 
@@ -160,7 +160,7 @@ app.get('/videos/:id', async (req, res) => {
             }
         })
         if (video) {
-            res.send(video)
+            res.status(200).send(video)
         }
         else {
             res.status(404).send({ error: 'Video not found' })
@@ -198,7 +198,7 @@ app.patch('/subscribe', async (req, res) => {
             })
         }
 
-        res.send(updatedUser)
+        res.status(200).send(updatedUser)
     } catch (err) {
         // @ts-ignore
         res.status(400).send({ error: err.message })
@@ -215,22 +215,28 @@ app.post('/video_likes', async (req, res) => {
             res.status(404).send({ error: 'You need to login before.' })
         }
         else {
-            const like = await prisma.video_likes.create({
-                // @ts-ignore
-                data: { videoId: videoId, userId: user.id }
-            })
-            const video = await prisma.video.findFirst({
-                where: { id: videoId }
-            })
-            if (video && user) {
-
-                await prisma.notification.create({
-                    data: {
-                        message: `${user.firstName} liked your video`, userId: video.userId
-                    }
+            const alreadyLiked = await prisma.video_likes.findFirst({ where: { userId: user.id, videoId: videoId } })
+            if (alreadyLiked) {
+                res.status(400).send({ error: 'You already liked this post' })
+            } else {
+                const like = await prisma.video_likes.create({
+                    // @ts-ignore
+                    data: { videoId: videoId, userId: user.id, liked: true }
                 })
+
+                const video = await prisma.video.findFirst({
+                    where: { id: videoId }
+                })
+                if (video && user) {
+
+                    await prisma.notification.create({
+                        data: {
+                            message: `${user.firstName} liked your video`, userId: video.userId
+                        }
+                    })
+                }
+                res.status(200).send(like)
             }
-            res.send(like)
         }
     }
     catch (err) {
@@ -249,22 +255,27 @@ app.post('/video_dislikes', async (req, res) => {
             res.status(404).send({ error: 'You need to login before.' })
         }
         else {
-            const dislike = await prisma.video_dislikes.create({
-                // @ts-ignore
-                data: { videoId: videoId, userId: user.id }
-            })
-            const video = await prisma.video.findFirst({
-                where: { id: videoId }
-            })
-            if (video && user) {
-
-                await prisma.notification.create({
-                    data: {
-                        message: `${user.firstName} disliked your video`, userId: video.userId
-                    }
+            const alreadyDisliked = await prisma.video_dislikes.findFirst({ where: { userId: user.id, videoId: videoId } })
+            if (alreadyDisliked) {
+                res.status(400).send({ error: 'You already disliked this post' })
+            } else {
+                const dislike = await prisma.video_dislikes.create({
+                    // @ts-ignore
+                    data: { videoId: videoId, userId: user.id }
                 })
+                const video = await prisma.video.findFirst({
+                    where: { id: videoId }
+                })
+                if (video && user) {
+
+                    await prisma.notification.create({
+                        data: {
+                            message: `${user.firstName} disliked your video`, userId: video.userId
+                        }
+                    })
+                }
+                res.status(200).send(dislike)
             }
-            res.send(dislike)
         }
     }
     catch (err) {
@@ -295,7 +306,7 @@ app.post('/comments', async (req, res) => {
                 }
             })
         }
-        res.send(comment)
+        res.status(200).send(comment)
     }
     catch (err) {
         // @ts-ignore
@@ -312,12 +323,17 @@ app.post('/comment_likes', async (req, res) => {
             res.status(404).send({ error: 'You need to login before.' })
         }
         else {
-            const like = await prisma.comment_likes.create({
-                // @ts-ignore
-                data: { commentId: commentId, userId: user.id }, include:
-                    { user: true, comment: true }
-            })
-            res.send(like)
+            const alreadyLiked = await prisma.comment_likes.findFirst({ where: { userId: user.id, commentId: commentId } })
+            if (alreadyLiked) {
+                res.status(400).send({ error: 'You already liked this comment' })
+            } else {
+                const like = await prisma.comment_likes.create({
+                    // @ts-ignore
+                    data: { commentId: commentId, userId: user.id }, include:
+                        { user: true, comment: true }
+                })
+                res.status(200).send(like)
+            }
         }
     }
     catch (err) {
@@ -335,12 +351,17 @@ app.post('/comment_dislikes', async (req, res) => {
             res.status(404).send({ error: 'You need to login before.' })
         }
         else {
-            const dislike = await prisma.comment_dislikes.create({
-                // @ts-ignore
-                data: { commentId: commentId, userId: user.id }, include:
-                    { user: true, comment: true }
-            })
-            res.send(dislike)
+            const alreadyDisliked = await prisma.comment_dislikes.findFirst({ where: { userId: user.id, commentId: commentId } })
+            if (alreadyDisliked) {
+                res.status(400).send({ error: 'You already disliked this comment' })
+            } else {
+                const dislike = await prisma.comment_dislikes.create({
+                    // @ts-ignore
+                    data: { commentId: commentId, userId: user.id }, include:
+                        { user: true, comment: true }
+                })
+                res.status(200).send(dislike)
+            }
         }
     }
     catch (err) {
@@ -363,7 +384,7 @@ app.post('/video_likes', async (req, res) => {
                 // @ts-ignore
                 data: { videoId: videoId, userId: user.id }
             })
-            res.send(like)
+            res.status(200).send(like)
         }
     }
     catch (err) {
@@ -387,7 +408,7 @@ app.post('/watch_later', async (req, res) => {
                 data: { videoId: videoId, userId: user.id },
                 include: { video: { include: { user: true } } }
             })
-            res.send(watch)
+            res.status(200).send(watch)
         }
     }
     catch (err) {
@@ -406,7 +427,7 @@ app.get('/watch_later', async (req, res) => {
                 where: { userId: user.id },
                 include: { video: { include: { user: true } } }
             })
-            res.send(watch)
+            res.status(200).send(watch)
         }
         else {
             res.status(404).send({ error: 'You need to login before.' })
@@ -428,7 +449,7 @@ app.get('/usersToSubscribe', async (req, res) => {
                 where: { NOT: { id: user.id } }
             })
 
-            res.send(usersToSubscribe)
+            res.status(200).send(usersToSubscribe)
         }
         else {
             res.status(404).send({ error: 'You need to login before.' })
@@ -451,7 +472,7 @@ app.get('/likedVideos', async (req, res) => {
                 include: { video: { include: { user: true } } }
             })
 
-            res.send(likedVideos)
+            res.status(200).send(likedVideos)
         }
         else {
             res.status(404).send({ error: 'You need to login before.' })
@@ -475,7 +496,7 @@ app.post('/search', async (req, res) => {
             }, include: { user: true }
 
         })
-        res.send(video)
+        res.status(200).send(video)
     }
     catch (err) {
         // @ts-ignore
@@ -493,7 +514,7 @@ app.post('/video_views', async (req, res) => {
             // @ts-ignore
             data: { videoId: videoId, userId: user.id }
         })
-        res.send(view)
+        res.status(200).send(view)
 
     }
     catch (err) {
@@ -514,7 +535,7 @@ app.get('/viewHistory', async (req, res) => {
             include: { video: { include: { user: true } } }
         })
 
-        res.send(view)
+        res.status(200).send(view)
     }
     catch (err) {
         // @ts-ignore
@@ -534,7 +555,7 @@ app.get('/trending', async (req, res) => {
             include: { user: true, Video_Views: true }
         })
 
-        res.send(trending)
+        res.status(200).send(trending)
     }
     catch (err) {
         // @ts-ignore
@@ -585,36 +606,8 @@ app.get('/allvideosexpectone/:id', async (req, res) => {
         where: { NOT: { id: id } },
         include: { user: true, videoTags: { include: { hashTag: true } }, comments: { include: { user: true, comment_dislikes: true, comment_likes: true } }, Video_Views: true, video_likes: true, video_dislikes: true }
     })
-    res.send(videos)
+    res.status(200).send(videos)
 })
-
-app.patch('/liked/:id', async (req, res) => {
-    const id = Number(req.params.id)
-    const token = req.headers.authorization || ''
-    const { videoId } = req.body
-    try {
-        const user = await getUserFromToken(token)
-        if (user) {
-            const updatedLike = await prisma.video_likes.update({
-                // @ts-ignore
-                where: { id }
-                , data: {
-                    liked: { set: true }, userId: user?.id, videoId: videoId
-                }, include: { user: { include: { notifications: true } }, video: { include: { video_likes: true } } }
-            })
-
-            res.send(updatedLike)
-        }
-        else {
-            res.send('Login')
-        }
-    } catch (err) {
-        // @ts-ignore
-        res.status(400).send({ error: err.message })
-    }
-
-})
-
 
 app.post('/post', async (req, res) => {
     const { text } = req.body
@@ -626,7 +619,7 @@ app.post('/post', async (req, res) => {
             data: { text: text, userId: user.id },
             include: { user: true }
         })
-        res.send(post)
+        res.status(200).send(post)
     }
     catch (err) {
         // @ts-ignore
